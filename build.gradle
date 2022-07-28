@@ -1,0 +1,104 @@
+plugins {
+    id 'java'
+    id 'idea'
+    id 'io.qameta.allure' version '2.10.0'
+}
+
+group 'my-framework-for-gui-tests'
+version '1.0-SNAPSHOT'
+
+repositories {
+    mavenCentral()
+}
+
+def junit5Version = '5.8.2'
+def slf4jVersion = '1.7.36'
+def selenideVersion = '6.6.6'
+def allureVersion = '2.18.1'
+def cucumberVersion = '6.11.0'
+
+dependencies {
+    implementation "com.codeborne:selenide:${selenideVersion}"
+    implementation "io.qameta.allure:allure-selenide:${allureVersion}"
+    implementation "io.qameta.allure:allure-cucumber6-jvm:${allureVersion}"
+    testImplementation "org.slf4j:slf4j-simple:${slf4jVersion}"
+    implementation "org.junit.jupiter:junit-jupiter-api:${junit5Version}"
+    implementation "io.cucumber:cucumber-java8:${cucumberVersion}"
+    implementation "io.cucumber:cucumber-junit:${cucumberVersion}"
+    implementation "io.cucumber:cucumber-testng:${cucumberVersion}"
+    implementation "io.cucumber:cucumber-picocontainer:${cucumberVersion}"
+    implementation 'com.sun.jersey:jersey-client:1.19.4'
+}
+
+final String workingDir = project.buildDir.toString()
+
+task beforeTest {
+
+    def DEFAULT_ENVIRONMENT = 'local'
+    def DEFAULT_BROWSER = 'chrome'
+    def DEFAULT_THREAD_COUNT = 1
+
+    if (System.getProperty("env") == null)
+        System.setProperty("env", DEFAULT_ENVIRONMENT)
+
+    if (System.getProperty("browser") == null)
+        System.setProperty("browser", DEFAULT_BROWSER)
+
+    if (System.getProperty("threads") == null)
+        System.setProperty("threads", DEFAULT_THREAD_COUNT as String)
+
+    doFirst {
+        ConfigObject config = new ConfigSlurper(System.getProperty("env")).parse(file('config.groovy').toURL())
+        final String TEST_PROPERTIES_PATH = workingDir + "/test.properties"
+        try {
+            FileOutputStream fos = new FileOutputStream(TEST_PROPERTIES_PATH)
+            Properties props = new Properties()
+            props.setProperty('env', System.getProperty("env"))
+            props.setProperty('browser', System.getProperty("browser"))
+            config.flatten().each { key, value -> props.setProperty(key, "" + value) }
+            props.store(fos, "Global test properties")
+        } catch (IOException e) {
+            e.printStackTrace()
+        }
+    }
+}
+
+test {
+    ignoreFailures = true
+    if (System.getProperty("tags") != null)
+        systemProperty("cucumber.filter.tags", System.getProperty("tags"))
+
+    systemProperty("cucumber.publish.enabled", "false")
+    systemProperty("cucumber.publish.quiet", "true")
+
+    useTestNG()
+    jvmArgs(["-Ddataproviderthreadcount=" + System.getProperty("threads")])
+    scanForTestClasses = false
+    testLogging.showStandardStreams = false
+}
+
+task afterTest {
+    doFirst {
+        final String PROPERTIES_PATH = workingDir + "/allure-results/environment.properties"
+        try {
+            FileOutputStream fos = new FileOutputStream(PROPERTIES_PATH)
+            Properties props = new Properties()
+            props.setProperty("Environment", System.getProperty("env"))
+            props.setProperty("Browser", System.getProperty("browser"))
+            props.setProperty("Threads", System.getProperty("threads"))
+            if (System.getProperty("tags") != null) props.setProperty("Tags", System.getProperty("tags"))
+            props.store(fos, "Environment properties")
+        } catch (IOException e) {
+            e.printStackTrace()
+        }
+    }
+}
+
+testClasses.finalizedBy beforeTest
+test.finalizedBy afterTest
+
+allure {
+    version = allureVersion
+    autoconfigure = false
+    aspectjweaver = true
+}
