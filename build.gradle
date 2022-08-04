@@ -99,6 +99,8 @@ test.finalizedBy afterTest
 
 allure {
     version = allureVersion
-    autoconfigure = false
     aspectjweaver = true
+    adapter.aspectjVersion.set("1.9.7")
+    autoconfigure = false
+
 }
